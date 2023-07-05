@@ -1,0 +1,362 @@
+<!DOCTYPE HTML>
+<!--
+	Forty by HTML5 UP
+	html5up.net | @ajlkn
+	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+-->
+<html>
+
+<head>
+	<title>Inventory Management Database Project</title>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+	<link rel="stylesheet" href="assets/css/main.css" />
+	<noscript>
+		<link rel="stylesheet" href="assets/css/noscript.css" />
+	</noscript>
+</head>
+
+<body class="is-preload">
+
+	<!-- Wrapper -->
+	<div id="wrapper">
+
+		<!-- Header -->
+		<header id="header">
+			<a href="index.html" class="logo"><strong>Inventory Management Database</strong> <span>by Dominique
+					Huffman</span></a>
+			<nav>
+				<a href="#menu">Menu</a>
+			</nav>
+		</header>
+
+		<!-- Menu -->
+		<nav id="menu">
+			<ul class="links">
+				<li><a href="index.html">Home</a></li>
+				<li><a href="inventorydatabaseproject.html">SQL Project</a></li>
+				<li><a href="inprogress.html">Project 2</a></li>
+				<li><a href="inprogress.html">Project 3</a></li>
+				<li><a href="aboutme.html">About Me</a></li>
+			</ul>
+		</nav>
+
+
+		<!-- Main -->
+		<div id="main" class="alt">
+
+			<!-- One -->
+			<section id="one">
+				<div class="inner">
+					<header class="major">
+						<h1>Inventory Management Database</h1>
+					</header>
+					<span class="image main"><img src="images/warehouse.jpg" alt="" /></span>
+					<p>I created a database for inventory and warehouse management for a company that
+						manufactures semi-custom accessories for kitchen appliances. They produced about 350 unique
+						designs that were
+						compatible with a variety of different stove range and cooktop model numbers. Each design was
+						available in either Lite or Premium material, and Black or Silver color. All four
+						of these variations (Lite Black, Lite Silver, Premium Black and Premium Silver) needed to be
+						kept in stock. A few designs were also offered in Copper Lite and Gold Lite, but since they were
+						less popular, those variations were made to order. There were two main
+						ways
+						the products were manufactured, either one at a time on a Zund (CNC) machine, or several at a
+						time with a die board using a clicker press.
+
+					</p>
+					<p>We were having trouble finding a software that would work for us out of the box,
+						primarily because our SKU to product ratio was not one-to-one. For example, let's say product
+						number 100 was compatible with four different stove models: AAA, BBB, CCC and DDD. In our
+						Shopify store we could list a SKU for a 1-pack and 3-pack of each material and color for product
+						100.
+						But on Amazon we would need to include the model number within the SKU becuase of the
+						constraints of their system. So the 100 Lite Black product alone would have the following SKUs
+						coming from that one stock level (these are not the actual SKUs but simplified for demonstration
+						purposes):
+
+					</p>
+					<ul>
+						<li>100-LT-BLK (Shopify 1-pack)</li>
+						<li>100-LT-BLK-3X (Shopify 3-pack)</li>
+						<li>100-LT-BLK-AAA (Amazon 1-pack for model AAA)</li>
+						<li>100-LT-BLK-BBB (Amazon 1-pack for model BBB)</li>
+						<li>100-LT-BLK-CCC (Amazon 1-pack for model CCC)</li>
+						<li>100-LT-BLK-DDD (Amazon 1-pack for model DDD)</li>
+					</ul>
+					<p>Most of the warehouse management softwares I looked into were set up to simply keep track of a
+						SKU coming from a specific location in the warehouse in a one-to-one ratio. We needed a database
+						that would be able to group together all the SKUs that were coming from the same stock shelf.
+
+					</p>
+					<p>The database would need to be able to keep track of current stock levels of both raw/uncut
+						materials,
+						plus the finished/cut products that were on the shelves. Each finished product would need
+						minimum stock and restock numbers so that workers would know <b>when</b> the product stock
+						needed
+						replenished, and <b>how much</b> to cut of each one. The database should include bin locations
+						for each product both for the purpose of restocking the shelves and for picking current orders.
+						Additionally we should be able to keep track of waste in the production process, as well as what
+						packaging was used to keep track of our box stock levels.
+					</p>
+					<h2 id="content">MySQL Database Schema</h2>
+					<span class="image fit"><img src="images/SG Database Schema.jpg" alt="" /></span>
+					<h3>Workflow</h3>
+					<p>An order comes in through one of the online stores and updates
+						the orders and order_items tables. The current stock levels in the products table are
+						diminished by the correct amount based on the SKUs in order_items. A pick_list view is generated
+						for unfulfilled orders, and warehouse workers use that list to pick and pack. In the
+						meantime, as product stock levels decrease below their minimum_stock_alert number, they are
+						included
+						in a cut_list view for the members of the production team. They cut the amount stated and update
+						the production table with the appropriate information. The scan_sku for each
+						product is the basic Shopify 1-pack SKU, which needs mapped onto the correct product and added
+						to its stock levels. At the same time the raw_materials table needs the stock diminished for the
+						raw materials used in production.
+					</p>
+					<!-- Preformatted Code -->
+					<h2 id="content">Triggers</h2>
+					<h3>Diminishing Product Stock Based On Order Items</h3>
+					<pre><code>
+DROP TRIGGER IF EXISTS update_product_stock_order_items;
+DELIMITER $$
+
+CREATE TRIGGER update_product_stock_order_items
+AFTER INSERT ON order_items
+FOR EACH ROW
+BEGIN
+	UPDATE products
+        SET stock = stock - (NEW.quantity *
+			(SELECT quantity_per_pack
+       	 		FROM skus
+       	 		WHERE sku = NEW.sku))
+    WHERE product_id = 
+			(SELECT product_id
+			FROM skus
+			WHERE sku = NEW.sku);
+END $$
+DELIMITER ;
+</code></pre>
+					<h3>Diminishing Raw Material Stock Based On Production</h3>
+					<pre><code>
+DROP TRIGGER IF EXISTS update_raw_material_stock_production;
+DELIMITER $$
+
+CREATE TRIGGER update_raw_material_stock_production
+AFTER INSERT ON production
+FOR EACH ROW
+BEGIN
+	UPDATE raw_materials
+	SET stock = stock - NEW.quantity
+	WHERE raw_material_id = 
+		(SELECT raw_material_id
+		FROM products
+		WHERE product_id = 
+			(SELECT product_id
+			FROM skus
+			WHERE sku = NEW.scan_sku));
+END $$
+DELIMITER ;						
+</code></pre>
+
+					<h3>Increasing Product Stock Based On Production</h3>
+					<pre><code>
+DROP TRIGGER IF EXISTS update_product_stock_production;
+DELIMITER $$
+
+CREATE TRIGGER update_product_stock_production
+AFTER INSERT ON production
+FOR EACH ROW
+BEGIN
+	UPDATE products
+	SET stock = stock + NEW.quantity
+	WHERE product_id = 
+		(SELECT product_id
+		FROM skus
+		WHERE sku = NEW.scan_sku);
+END $$
+DELIMITER ;
+						
+</code></pre>
+					<h2 id="content">Views</h2>
+					<h3>Pick List View</h3>
+					<p>This is the pick list for the entire list of unfulfilled order items, excluding warranties and
+						other intangible products, and sorted by bin location to ensure efficient picking.</p>
+					<pre><code>
+CREATE OR REPLACE VIEW pick_list AS
+SELECT
+	p.product_name,
+	(SELECT bin_location FROM products WHERE p.product_name = product_name) AS bin_location,
+	SUM(oi.quantity * s.quantity_per_pack) AS quantity_to_pick
+FROM order_items oi
+JOIN skus s USING (sku)
+JOIN products p USING (product_id)
+WHERE order_item_status = 'pending' AND sku NOT LIKE '%warranty' AND sku NOT LIKE 'SS%'
+GROUP BY p.product_name
+ORDER BY bin_location	
+</code></pre>
+
+					<h3>Cut List View</h3>
+					<p>The cut list is sorted both by what machine is used in production and what type and color of
+						raw material is needed. If a stock level dips below zero, the cut amount should include the
+						standard restock
+						level for that product, plus however much it has gone below zero. This ensures that the cut_now
+						amount will cover all current orders plus the standard stock level.</p>
+					<pre><code>
+CREATE OR REPLACE VIEW cut_list AS
+SELECT 
+	p.product_name,
+	p.bin_location,
+	(CASE
+		WHEN (p.stock < 0) THEN (p.restock_amount - p.stock)
+		ELSE p.restock_amount
+	END) AS cut_now,
+	p.mfg_method,
+	rm.size,
+	rm.material_type,
+	rm.color,
+	p.stock
+FROM products p
+JOIN raw_materials rm 
+	USING (raw_material_id)
+WHERE
+	p.stock <= p.minimum_stock_alert
+	AND p.mfg_method IS NOT NULL
+ORDER BY p.mfg_method , rm.material_type , rm.color;
+</code></pre>
+					<h3>Box Report</h3>
+					<p>Packaging has been given a priority number based on how large it is. The largest box is Priority
+						1, the next largest Priority 2 and so on. When multiple items are ordered, the packaging chosen
+						must accommodate the largest item in the order. The box report has been designed to concatenate
+						all order items and boxes needed for an order, and list the highest priority box first.</p>
+					<pre><code>
+CREATE OR REPLACE VIEW box_report AS
+SELECT
+	oi.order_number,
+	group_concat(p.product_name ORDER BY p.product_name) AS items,
+	group_concat((SELECT name FROM packaging WHERE packaging_id =p.packaging_id) 
+			ORDER BY (SELECT priority FROM packaging WHERE packaging_id = p.packaging_id)) AS boxes
+FROM order_items oi
+JOIN skus s USING (sku)
+JOIN products p USING (product_id)
+WHERE p.packaging_id != 7
+GROUP BY order_number
+ORDER BY boxes
+</code></pre>
+					<h2 id="content">Refining the Pick List Process</h2>
+					<p>The picking/packing team don't normally pick the entire list of unfulfilled orders all in one go.
+						They'll split the list up into groups of about 30 orders each based on common items, then print
+						out the shipping labels associated with the orders just picked. The process
+						is a bit slow and tedious, so I wanted to find a way to streamline it and let the database
+						handle grouping together similar order items and creating subsets of the entire pick list
+						accordingly.
+					</p>
+					<h3>Concatenated Pick List</h3>
+					<p>The concatenated pick list is designed to sort pending orders based on included items and then
+						limit
+						it to the first 30 orders.
+					</p>
+					<pre><code>
+CREATE OR REPLACE VIEW concat_pick_list AS
+SELECT
+	o.date_ordered,
+	oi.order_number,
+	group_concat(p.product_name ORDER BY p.product_name) AS items,
+	group_concat(p.bin_location ORDER BY p.bin_location) AS bins
+FROM order_items oi
+JOIN skus s USING (sku)
+JOIN products p USING (product_id)
+JOIN orders o USING (order_number)
+WHERE order_item_status = 'pending' AND sku NOT LIKE '%warranty' AND sku NOT LIKE 'SS%'
+GROUP BY order_number
+ORDER BY bins
+LIMIT 0,30
+						</code></pre>
+					<h3>Subset Pick List</h3>
+					<p>The subset pick list is exactly the same as the original pick list for all unfulfilled orders,
+						but now includes the exact 30
+						orders listed in the concatenated pick list.</p>
+					<pre><code>
+CREATE OR REPLACE VIEW subset_pick_list AS
+SELECT p.product_name, 
+	(SELECT bin_location FROM products WHERE p.product_name = product_name) AS bin_location,
+	SUM(oi.quantity * s.quantity_per_pack) AS quantity_to_pick
+FROM order_items oi
+JOIN skus s USING (sku)
+JOIN products p USING (product_id)
+WHERE order_number IN (SELECT order_number FROM concat_pick_list)
+GROUP BY p.product_name
+ORDER BY bin_location
+													</code></pre>
+					<h2 id="content">Next Steps</h2>
+					<p>Now that the database is working smoothly within MySQL, our next steps would be to set up an API
+						connection to the marketplaces and our shipping software so that the orders and order_items
+						tables get live updates.
+						Additionally, it would be beneficial to set up a simple user interface for
+						the workers in the warehouse to be able to access the views and update the production table.
+					</p>
+				</div>
+			</section>
+
+		</div>
+
+		<!-- Contact -->
+		<section id="contact">
+			<div class="center">
+				<section>
+					<div class="contact-method">
+						<span class="icon solid alt fa-envelope"></span>
+						<h3>Email</h3>
+						<a href="mailto:dominiquebarreca@gmail.com">dominiquebarreca@gmail.com</a>
+					</div>
+				</section>
+				<section>
+					<div class="contact-method">
+						<span class="icon solid alt fa-phone"></span>
+						<h3>Phone</h3>
+						<span>(216) 533-5631</span>
+					</div>
+				</section>
+				<section>
+					<div class="contact-method">
+						<span class="icon solid alt fa-home"></span>
+						<h3>Location</h3>
+						<span>Cleveland, Ohio 44134<br />
+							United States of America</span>
+					</div>
+				</section>
+		</section>
+	</div>
+	</section>
+
+	<!-- Footer -->
+	<footer id="footer">
+		<div class="inner">
+			<ul class="icons">
+				<li><a href="https://github.com/nikkihuffman" class="icon brands alt fa-github" target="_blank"
+						rel="noopener noreferrer"><span class="label">GitHub</span></a></li>
+				<li><a href="https://www.linkedin.com/in/dominique-huffman-2aa91410/"
+						class="icon brands alt fa-linkedin-in" target="_blank" rel="noopener noreferrer"><span
+							class="label">LinkedIn</span></a></li>
+			</ul>
+			<ul class="copyright">
+				<li>&copy; 2023</li>
+				<li>Design: <a href="https://html5up.net">HTML5 UP</a></li>
+			</ul>
+		</div>
+	</footer>
+
+	</div>
+
+	<!-- Scripts -->
+	<script src="assets/js/jquery.min.js"></script>
+	<script src="assets/js/jquery.scrolly.min.js"></script>
+	<script src="assets/js/jquery.scrollex.min.js"></script>
+	<script src="assets/js/browser.min.js"></script>
+	<script src="assets/js/breakpoints.min.js"></script>
+	<script src="assets/js/util.js"></script>
+	<script src="assets/js/main.js"></script>
+
+</body>
+
+</html>
